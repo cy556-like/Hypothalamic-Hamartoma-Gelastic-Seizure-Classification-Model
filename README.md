@@ -10,6 +10,13 @@ This is a classification model for GS (gelastic seizures) in patients with HH (h
 
 The experimental hardware configuration included an AMD EPYC-7F72 CPU, 126 GB of RAM, and an NVIDIA GeForce RTX 4090 GPU. The system was Ubuntu Linux 22.04.1, and the framework was PyTorch 2.5.1+cu12.2.
 
+
+
+
+![image](https://gitee.com/cy556-like/hh-classification-of-gs/模型流程图.png)
+![image](https://gitee.com/cy556-like/hh-classification-of-gs/大模块图.png)
+![image](https://gitee.com/cy556-like/hh-classification-of-gs/小模块图.png)
+
 #### 使用说明
 
 1.  xxxx
