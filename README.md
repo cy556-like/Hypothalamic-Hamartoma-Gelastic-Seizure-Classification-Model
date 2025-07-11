@@ -1,3 +1,4 @@
+
 # HH classification of gs
 
 #### INTRODUCTION
@@ -13,9 +14,9 @@ The experimental hardware configuration included an AMD EPYC-7F72 CPU, 126 GB of
 
 
 
-![image](https://gitee.com/cy556-like/hh-classification-of-gs/模型流程图.png)
-![image](https://gitee.com/cy556-like/hh-classification-of-gs/大模块图.png)
-![image](https://gitee.com/cy556-like/hh-classification-of-gs/小模块图.png)
+![image](https://gitee.com/cy556-like/hh-classification-of-gs/模型流程图.jpg)
+![image](https://gitee.com/cy556-like/hh-classification-of-gs/大模块图.jpg)
+![image](https://gitee.com/cy556-like/hh-classification-of-gs/小模块图.jpg)
 
 #### 使用说明
 
