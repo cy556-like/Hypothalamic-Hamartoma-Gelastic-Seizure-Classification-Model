@@ -5,11 +5,11 @@ import torch.nn.functional as F
 
 
 class ChannelTimeAttention(nn.Module):
-    """双路径注意力机制：通道注意力 + 频率轴注意力"""
+    """Dual-path attention mechanism: Channel attention + Frequency-axis attention"""
 
     def __init__(self, channel, reduction=16):
         super().__init__()
-        # 确保reduction不会使中间层通道数小于1
+        # Ensure reduction does not make the intermediate channel count less than 1
         mid_channels = max(1, channel // reduction)
 
         self.channel_att = nn.Sequential(
@@ -32,12 +32,13 @@ class ChannelTimeAttention(nn.Module):
         ta = self.time_att(ta).unsqueeze(2)
         return x * ca * ta
 
+
 class MultiScaleDSConv(nn.Module):
-    """多尺度深度可分离卷积块"""
+    """Multi-scale depthwise separable convolution block"""
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        # 确保out_channels至少为4，以便能够正确划分为4个分支
+        # Ensure out_channels is at least 4 to properly split into 4 branches
         assert out_channels >= 4, "Output channels must be at least 4 for MultiScaleDSConv"
 
         self.branches = nn.ModuleList([
@@ -75,7 +76,7 @@ class MultiScaleDSConv(nn.Module):
 
 
 class FreqTemporalBlock(nn.Module):
-    """频率-时间特征块"""
+    """Frequency-temporal feature block"""
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -91,7 +92,7 @@ class FreqTemporalBlock(nn.Module):
 
 
 class PlainConvBlock(nn.Module):
-    """普通卷积块（有残差连接）"""
+    """Plain convolution block (with residual connection)"""
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -105,21 +106,18 @@ class PlainConvBlock(nn.Module):
         return F.gelu(x + residual)
 
 
-
-
-
-# 完整模型
+# Complete model
 class Net(nn.Module):
     def __init__(self, in_channel, dropout=0.5, num_classes=2):
         super(Net, self).__init__()
         self.stem = nn.Sequential(
-            nn.Conv2d(in_channel, in_channel, kernel_size=(7, 3), padding=(3, 1), groups=in_channel),  # 深度卷积，保持通道数
+            nn.Conv2d(in_channel, in_channel, kernel_size=(7, 3), padding=(3, 1), groups=in_channel),  # Depthwise convolution, keeping channel count
             nn.BatchNorm2d(in_channel),
             nn.GELU(),
             nn.MaxPool2d(kernel_size=(3, 1), stride=(2, 1), padding=(1, 0))
         )
 
-        # 修改blocks层，起始通道数为19
+        # Modify blocks layer, starting with 19 channels
         self.blocks = nn.Sequential(
             FreqTemporalBlock(in_channel, 64),  # 19 -> 64
             nn.MaxPool2d((3, 1), (2, 1), (1, 0)),
@@ -128,11 +126,11 @@ class Net(nn.Module):
             FreqTemporalBlock(128, 256),  # 128 -> 256
         )
 
-        # 修改LSTM的输入维度
+        # Modify LSTM input dimension
         self.lstm = nn.LSTM(input_size=256, hidden_size=256, dropout=dropout, num_layers=2, batch_first=True,
                             bidirectional=True)
 
-        # 修改分类器的输入维度
+        # Modify classifier input dimension
         self.classifier = nn.Sequential(
             nn.Linear(1024, 256),  # 2*256 = 512 -> 256
             nn.Dropout(dropout),
@@ -157,9 +155,10 @@ class Net(nn.Module):
         h_n = h_n.transpose(0, 1).reshape(x.size(0), -1)
         return self.classifier(h_n)
 
-# 纯粹的传统卷积块（无残差连接）
+
+# Pure traditional convolution block (without residual connection)
 class PureConvBlock(nn.Module):
-    """纯粹的传统卷积块（无残差连接）"""
+    """Pure traditional convolution block (without residual connection)"""
 
     def __init__(self, in_channels, out_channels):
         super(PureConvBlock, self).__init__()
@@ -172,18 +171,20 @@ class PureConvBlock(nn.Module):
         x = self.bn(x)
         x = self.act(x)
         return x
-# 消融1 - 只移除LSTM，保留所有其他组件
+
+
+# Ablation 1 - Remove only LSTM, keep all other components
 class NetNoLSTM(nn.Module):
     def __init__(self, in_channel, dropout=0.5, num_classes=2):
         super(NetNoLSTM, self).__init__()
-        # 保持与Net相同的stem层
+        # Keep the same stem layer as Net
         self.stem = nn.Sequential(
             nn.Conv2d(in_channel, in_channel, kernel_size=(7, 3), padding=(3, 1), groups=in_channel),
             nn.BatchNorm2d(in_channel),
             nn.GELU(),
             nn.MaxPool2d(kernel_size=(3, 1), stride=(2, 1), padding=(1, 0))
         )
-        # 保持与Net相同的blocks层
+        # Keep the same blocks layer as Net
         self.blocks = nn.Sequential(
             FreqTemporalBlock(in_channel, 64),
             nn.MaxPool2d((3, 1), (2, 1), (1, 0)),
@@ -191,7 +192,7 @@ class NetNoLSTM(nn.Module):
             nn.MaxPool2d((3, 1), (2, 1), (1, 0)),
             FreqTemporalBlock(128, 256),
         )
-        # 移除LSTM，使用全局池化
+        # Remove LSTM, use global pooling instead
         self.global_pool = nn.AdaptiveAvgPool2d(1)
         self.classifier = nn.Sequential(
             nn.Linear(256, 256),
@@ -199,20 +200,21 @@ class NetNoLSTM(nn.Module):
             nn.Linear(256, num_classes)
         )
 
-        # 添加这一行，初始化stem_output属性
+        # Add this line to initialize stem_output attribute
         self.stem_output = None
 
     def forward(self, x):
         x = self.stem(x)
 
-        # 添加这一行，保存stem输出
+        # Add this line to save stem output
         self.stem_output = x
 
         x = self.blocks(x)
         x = self.global_pool(x).view(x.size(0), -1)
         return self.classifier(x)
 
-# 消融2：移除LSTM和注意力机制 - 添加这个缺失的类
+
+# Ablation 2: Remove LSTM and attention mechanism - Add this missing class
 class FreqTemporalBlockNoAttention(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -224,18 +226,19 @@ class FreqTemporalBlockNoAttention(nn.Module):
         x = self.multi_scale(x)
         return F.gelu(x + residual)
 
-# 消融2：移除LSTM和注意力机制
+
+# Ablation 2: Remove LSTM and attention mechanism
 class NetNoLSTMNoAttention(nn.Module):
     def __init__(self, in_channel, dropout=0.5, num_classes=2):
         super(NetNoLSTMNoAttention, self).__init__()
-        # 保持与Net相同的stem层
+        # Keep the same stem layer as Net
         self.stem = nn.Sequential(
             nn.Conv2d(in_channel, in_channel, kernel_size=(7, 3), padding=(3, 1), groups=in_channel),
             nn.BatchNorm2d(in_channel),
             nn.GELU(),
             nn.MaxPool2d(kernel_size=(3, 1), stride=(2, 1), padding=(1, 0))
         )
-        # 使用无注意力的blocks
+        # Use blocks without attention
         self.blocks = nn.Sequential(
             FreqTemporalBlockNoAttention(in_channel, 64),
             nn.MaxPool2d((3, 1), (2, 1), (1, 0)),
@@ -250,13 +253,13 @@ class NetNoLSTMNoAttention(nn.Module):
             nn.Linear(256, num_classes)
         )
 
-        # 添加stem_output属性
+        # Add stem_output attribute
         self.stem_output = None
 
     def forward(self, x):
         x = self.stem(x)
 
-        # 保存stem输出
+        # Save stem output
         self.stem_output = x
 
         x = self.blocks(x)
@@ -264,18 +267,18 @@ class NetNoLSTMNoAttention(nn.Module):
         return self.classifier(x)
 
 
-# 消融3：移除LSTM、注意力机制和多尺度卷积 (保留残差连接)
+# Ablation 3: Remove LSTM, attention mechanism, and multi-scale convolution (retain residual connections)
 class NetNoLSTMNoAttentionNoMSConv(nn.Module):
     def __init__(self, in_channel, dropout=0.5, num_classes=2):
         super(NetNoLSTMNoAttentionNoMSConv, self).__init__()
-        # 保持与Net相同的stem层
+        # Keep the same stem layer as Net
         self.stem = nn.Sequential(
             nn.Conv2d(in_channel, in_channel, kernel_size=(7, 3), padding=(3, 1), groups=in_channel),
             nn.BatchNorm2d(in_channel),
             nn.GELU(),
             nn.MaxPool2d(kernel_size=(3, 1), stride=(2, 1), padding=(1, 0))
         )
-        # 使用普通卷积块（有残差连接）
+        # Use plain convolution blocks (with residual connections)
         self.blocks = nn.Sequential(
             PlainConvBlock(in_channel, 64),
             nn.MaxPool2d((3, 1), (2, 1), (1, 0)),
@@ -290,13 +293,13 @@ class NetNoLSTMNoAttentionNoMSConv(nn.Module):
             nn.Linear(256, num_classes)
         )
 
-        # 添加stem_output属性
+        # Add stem_output attribute
         self.stem_output = None
 
     def forward(self, x):
         x = self.stem(x)
 
-        # 保存stem输出
+        # Save stem output
         self.stem_output = x
 
         x = self.blocks(x)
@@ -304,18 +307,18 @@ class NetNoLSTMNoAttentionNoMSConv(nn.Module):
         return self.classifier(x)
 
 
-# 消融4：基础CNN (无LSTM、无注意力、无多尺度卷积、无残差连接)
+# Ablation 4: Basic CNN (no LSTM, no attention, no multi-scale convolution, no residual connections)
 class NetPureCNN(nn.Module):
     def __init__(self, in_channel, dropout=0.5, num_classes=2):
         super(NetPureCNN, self).__init__()
-        # 保持与Net相同的stem层
+        # Keep the same stem layer as Net
         self.stem = nn.Sequential(
             nn.Conv2d(in_channel, in_channel, kernel_size=(7, 3), padding=(3, 1), groups=in_channel),
             nn.BatchNorm2d(in_channel),
             nn.GELU(),
             nn.MaxPool2d(kernel_size=(3, 1), stride=(2, 1), padding=(1, 0))
         )
-        # 使用无残差连接的纯卷积块
+        # Use pure convolution blocks without residual connections
         self.blocks = nn.Sequential(
             PureConvBlock(in_channel, 64),
             nn.MaxPool2d((3, 1), (2, 1), (1, 0)),
@@ -330,12 +333,12 @@ class NetPureCNN(nn.Module):
             nn.Linear(256, num_classes)
         )
 
-        # 添加stem_output属性
+        # Add stem_output attribute
         self.stem_output = None
 
     def forward(self, x):
         x = self.stem(x)
-        # 保存stem输出
+        # Save stem output
         self.stem_output = x
         x = self.blocks(x)
         x = self.global_pool(x).view(x.size(0), -1)
@@ -344,5 +347,3 @@ class NetPureCNN(nn.Module):
 
 if __name__ == '__main__':
     import torchinfo
-
-
